@@ -32,8 +32,7 @@ namespace TapSDK.Compliance
         /// <summary>
         /// 激活手动认证
         /// </summary>
-        /// <param name="activelyVerifyManually">是否为主动选择激活手动认证</param>
-        protected abstract Task VerifyManuallyAsync(bool activelyVerifyManually);
+        protected abstract Task VerifyManuallyAsync();
         
         /// <summary>
         /// 检查未成年人可玩性
@@ -69,6 +68,10 @@ namespace TapSDK.Compliance
         /// <returns></returns>
         protected virtual async Task<int> OnCheckedPlayableWithMinorAsync(PlayableResult playable)
         {
+            if (playable.RemainTime > 0)
+            {
+                TapTapComplianceManager.ShowAntiAddictionTip();
+            }
             var tcs = new TaskCompletionSource<int>();
             Action onOk;
             if (playable.RemainTime > 0) {
@@ -344,40 +347,61 @@ namespace TapSDK.Compliance
         #region Internal
 
         public async Task<int> StartUp(string userId) {
-            var lastVerificationValid = await CheckLastVerificationValid(userId);
-            if (!lastVerificationValid) {
+            await FetchVerificationAsync(userId);
+            if (Verification.Current == null ||  Verification.IsVerifyFailed)
+            {
                 TapLogger.Debug("try get token internal by UI");
                 var result = await InternalStartup(userId);
-                // 目前只会返回 9002 和 0-认证成功 ,-1:认证中;-2:实名信息为空;-3:认证未通过;-4:code换取实名5xx异常
+                // 目前只会返回 9002 和 0-认证成功
                 // 9002 是 StartUpResult.REAL_NAME_STOP
-                if (result != 0) {
+                if (result != 0)
+                {
                     return result;
                 }
             }
-            else {
+            else if (Verification.IsVerifing)
+            {
+                return await ShowVerifingTip();
+            }
+            else
+            {
                 UIManager.Instance.CloseLoading();
             }
             return await OnVerificationFetched();
         }
 
-        private async Task<bool> CheckLastVerificationValid(string userId) {
-            await FetchVerificationAsync(userId);
-            return Verification.IsVerified;
+        /// <summary>
+        /// 显示实名中提示
+        /// </summary>
+        internal async Task<int> ShowVerifingTip()
+        {
+            var task = new TaskCompletionSource<int>();
+            var tip = Config.GetInputIdentifyBlockingTip();
+            Action onOk = () =>
+            {
+                TapLogger.Debug("[TapTap: ChinaCompliance] 认证中,实名取消!");
+                task.TrySetResult(StartUpResult.REAL_NAME_STOP);
+            };
+            TapComplianceUI.OpenHealthPaymentPanel(tip.Title, tip.Content, tip.PositiveButtonText, onOk);
+            return await task.Task;
         }
         /// <summary>
         /// 获得实名信息
         /// </summary>
-        public async Task FetchVerificationAsync(string userId){
+        public async Task FetchVerificationAsync(string userId)
+        {
             // 拉取服务端实名信息
-                try {
-                    await Verification.Fetch(userId);
-                    UIManager.Instance.CloseLoading();
-                }
-                catch (Exception e) {
-                    TapLogger.Error(e);
-                    UIManager.Instance.CloseLoading();
-                    //所有错误跳过，执行实名
-                }
+            try
+            {
+                await Verification.Fetch(userId);
+                UIManager.Instance.CloseLoading();
+            }
+            catch (Exception e)
+            {
+                TapLogger.Error(e);
+                UIManager.Instance.CloseLoading();
+                //所有错误跳过，执行实名
+            }
         }
         
         /// <summary>

@@ -5,30 +5,30 @@ using TapSDK.Core;
 
 namespace TapSDK.Compliance.Model 
 {
-    public class VerificationResult 
+    public class VerificationResult
     {
 
         [JsonProperty("status")]
         public string Status { get; private set; }
 
-        [JsonProperty("anti_addiction_token")] 
+        [JsonProperty("anti_addiction_token")]
         internal string ComplianceToken { get; private set; }
-        
-        [JsonProperty("code")] 
+
+        [JsonProperty("code")]
         public int errorCode { get; private set; }
-        
-        [JsonProperty("error")] 
+
+        [JsonProperty("error")]
         public string error { get; private set; }
-        
-        [JsonProperty("error_description")] 
+
+        [JsonProperty("error_description")]
         public string errorDescription { get; private set; }
-        
-        [JsonProperty("msg")] 
+
+        [JsonProperty("msg")]
         public string msg { get; private set; }
-        
+
         internal VerificationResult() { }
 
-        internal VerificationResult(VerificationResult other) 
+        internal VerificationResult(VerificationResult other)
         {
             TapLogger.Debug("current state = " + other.Status);
             Status = other.Status;
@@ -38,6 +38,21 @@ namespace TapSDK.Compliance.Model
             errorDescription = other.errorDescription;
             msg = other.msg;
         }
+        
+        /// <summary>
+        /// 是否已认证
+        /// </summary>
+        internal bool IsVerified => Status?.Equals(ComplianceConst.VERIFICATION_STATUS_SUCCESS) ?? false;        
+        
+        /// <summary>
+        /// 是否在认证中
+        /// /// </summary>
+        internal bool IsVerifing => Status?.Equals(ComplianceConst.VERIFICATION_STATUS_WAITING) ?? false;
+        
+        /// <summary>
+        /// 是否认证失败
+        /// /// </summary>
+        internal bool IsVerifyFailed => Status?.Equals(ComplianceConst.VERIFICATION_STATUS_FAILED) ?? false;
     }
 
 
@@ -65,21 +80,6 @@ namespace TapSDK.Compliance.Model
         internal LocalVerification() { }
 
         internal LocalVerification(VerificationResult obj) : base(obj) { }
-
-        /// <summary>
-        /// 是否已认证
-        /// </summary>
-        internal bool IsVerified => Status.Equals(ComplianceConst.VERIFICATION_STATUS_SUCCESS);        
-        
-        /// <summary>
-        /// 是否在认证中
-        /// /// </summary>
-        internal bool IsVerifing => Status.Equals(ComplianceConst.VERIFICATION_STATUS_WAITING);
-        
-        /// <summary>
-        /// 是否认证失败
-        /// /// </summary>
-        internal bool IsVerifyFailed => Status.Equals(ComplianceConst.VERIFICATION_STATUS_FAILED);
 
         internal bool CheckIsAdult => AgeLimit == Verification.AGE_LIMIT_ADULT || AgeLimit == Verification.UNKNOWN_AGE_ADULT;
 

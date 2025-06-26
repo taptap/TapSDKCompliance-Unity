@@ -146,11 +146,14 @@ namespace TapSDK.Compliance.Internal
                     isSending = false;
                     // 后端返回后按钮可用
                     submitButton.interactable = true;
-                    if (verificationResult.Status.Equals("pass"))
+                    if (!verificationResult.IsVerifyFailed)
                     {
                         // TODO@luran:本地化
                         Close();
-                        UIManager.Instance.OpenToast("提交成功", UIManager.GeneralToastLevel.Success);
+                        if (verificationResult.IsVerified)
+                        {
+                            UIManager.Instance.OpenToast("提交成功", UIManager.GeneralToastLevel.Success);
+                        }
                     }
                     OnVerified?.Invoke(verificationResult);
                 }

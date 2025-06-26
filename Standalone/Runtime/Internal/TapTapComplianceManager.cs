@@ -215,6 +215,21 @@ namespace TapSDK.Compliance
         {
             return false;
         }
+
+         /// 首次通过，弹防沉迷提示文案
+        internal static void ShowAntiAddictionTip()
+        {
+            if (string.IsNullOrEmpty(UserId)){
+                return;
+            }
+            var userIdEncode = "compliance_tip_" + Tool.EncryptString(UserId);
+            var hasShowTip = !string.IsNullOrEmpty(DataStorage.LoadString(userIdEncode));
+            if (!hasShowTip)
+            {
+                TapMessage.ShowMessage("已通过防沉迷校验，祝您游戏愉快！", position:TapMessage.Position.bottom, time:TapMessage.Time.threeSecond);
+                DataStorage.SaveString(userIdEncode, "1");
+            }
+        }
         
         public static bool? useMobileUI;
         

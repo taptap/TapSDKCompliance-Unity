@@ -9,6 +9,7 @@ using TapSDK.Core;
 using TapSDK.Core.Standalone;
 using TapSDK.Core.Internal.Utils;
 using Newtonsoft.Json;
+using TapSDK.UI;
 
 namespace TapSDK.Compliance
 {
@@ -217,8 +218,10 @@ namespace TapSDK.Compliance
             TapTapComplianceManager.SetTestEnvironment(enable);
         }
 
-        public void OnInvokeExternalCallback(int code, string msg){
-            switch(code){
+        public void OnInvokeExternalCallback(int code, string msg)
+        {
+            switch (code)
+            {
                 case StartUpResult.LOGIN_SUCCESS:
                     TapTapComplianceManager.CanPlay = true;
                     break;
@@ -236,12 +239,13 @@ namespace TapSDK.Compliance
                 || code == StartUpResult.EXITED // 登出用户
                 || code == StartUpResult.AGE_LIMIT // 年龄限制
                 || code == StartUpResult.SWITCH_ACCOUNT // 切换账号
-                || code == StartUpResult.INVALID_CLIENT_OR_NETWORK_ERROR) { // 网络异常
-                    // 用户结束校验流程
-                    isCheckingUser = false;
-                }
-             // 在 openlog 中设置当前用户信息
-            if ( code == StartUpResult.LOGIN_SUCCESS || code == StartUpResult.EXITED || code == StartUpResult.SWITCH_ACCOUNT) 
+                || code == StartUpResult.INVALID_CLIENT_OR_NETWORK_ERROR)
+            { // 网络异常
+              // 用户结束校验流程
+                isCheckingUser = false;
+            }
+            // 在 openlog 中设置当前用户信息
+            if (code == StartUpResult.LOGIN_SUCCESS || code == StartUpResult.EXITED || code == StartUpResult.SWITCH_ACCOUNT)
             {
                 string userIdentifier = "";
                 string userSessionId = "";
@@ -250,20 +254,29 @@ namespace TapSDK.Compliance
                     userIdentifier = TapTapComplianceManager.UserId ?? "";
                     userSessionId = TapTapComplianceManager.CurrentSession ?? "";
                 }
-                Dictionary<string,string> userData = new Dictionary<string,string>() {
+                Dictionary<string, string> userData = new Dictionary<string, string>()
+                {
                     ["anti_addict_user_identifier"] = userIdentifier,
                     ["anti_addict_session_id"] = userSessionId
                 };
                 string userInfo = JsonConvert.SerializeObject(userData);
                 EventManager.TriggerEvent(EventManager.OnComplianceUserChanged, userInfo);
-            } 
+            }
 
-            if (StartUpResult.Contains(code)){
-                if(_externalCallbackList != null){
-                    foreach(Action<int, string> callback in _externalCallbackList){
+            if (StartUpResult.Contains(code))
+            {
+                if (_externalCallbackList != null)
+                {
+                    foreach (Action<int, string> callback in _externalCallbackList)
+                    {
                         callback?.Invoke(code, msg);
                     }
                 }
+            }
+
+            if (code == StartUpResult.LOGIN_SUCCESS)
+            {
+                TapTapComplianceManager.ShowAntiAddictionTip();
             }
         }
 

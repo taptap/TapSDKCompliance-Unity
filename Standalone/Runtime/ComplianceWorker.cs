@@ -36,10 +36,8 @@ namespace TapSDK.Compliance
         /// <summary>
         /// 激活手动认证
         /// </summary>
-        /// <param name="activelyVerifyManually">是否为主动选择激活手动认证</param>
-        protected override async Task VerifyManuallyAsync(bool activelyVerifyManually)
+        protected override async Task VerifyManuallyAsync()
         {
-            var userId = TapTapComplianceManager.UserId;
             do 
             {
                 try 
@@ -109,7 +107,7 @@ namespace TapSDK.Compliance
                 // 计算时间
                 DateTimeOffset gameEndTime = Config.StrictEndTime;
                 DateTimeOffset now = DateTimeOffset.FromUnixTimeSeconds(GetCurrentTime()).ToOffset(DateTimeOffset.Now.Offset);
-                TimeSpan remain = gameEndTime - now;
+                TimeSpan remain = gameEndTime.TimeOfDay - now.TimeOfDay;
 
                 return new PlayableResult 
                 {
@@ -194,7 +192,7 @@ namespace TapSDK.Compliance
             try {
                 VerificationResult result = await Verification.FetchVerificationByTapToken(userId,accessToken);
                 UIManager.Instance.CloseLoading();
-                if(result.Status != null && result.Status.Equals(ComplianceConst.VERIFICATION_STATUS_SUCCESS)){
+                if(result.Status != null && !result.IsVerifyFailed){
                     tcs.TrySetResult(0);
                 }else{
                     tcs.TrySetResult(-1);
@@ -230,10 +228,10 @@ namespace TapSDK.Compliance
             if(holidays.Contains(currentDate)){
                 DateTimeOffset strictStart = Config.StrictStartTime;
                 DateTimeOffset strictEnd = Config.StrictEndTime;
-
                 bool playable;
-                TapLogger.Debug(" now = " + now + " ,start = " + strictStart + ", end = " + strictEnd);
-                playable = now >= strictStart && now < strictEnd;
+                TapLogger.Debug(" now = " + now.TimeOfDay + " ,start = " + strictStart.TimeOfDay + ", end = " + strictEnd.TimeOfDay);
+                playable = now.TimeOfDay >= strictStart.TimeOfDay && now.TimeOfDay < strictEnd.TimeOfDay;
+                TapLogger.Debug("check result = " + playable);
                 return playable;
             }
             return false;
@@ -251,7 +249,6 @@ namespace TapSDK.Compliance
         /// <summary>
         /// 打开中国实名制窗口
         /// </summary>
-        /// <param name="activelyVerifyManually">是否为主动选择激活手动认证</param>
         /// <returns></returns>
         private Task<VerificationResult> OpenVerificationPanelCn()
         {
@@ -306,13 +303,15 @@ namespace TapSDK.Compliance
                     TapLogger.Debug("[TapTap: ChinaCompliance] 获得登录Access Token!Token结果: {0}\n是否包括Compliance: {1}",
                         accessToken.ToJson(), HaveComplianceScope(accessToken));
                     if (HaveComplianceScope(accessToken)) {
-                        // 0-正常;1-走手动;-1-打断流程
+                        // 0-正常;1-异常;-1-实名失败
                         var fetchResult = await FetchByTapToken(userId, accessToken);
-                        if (fetchResult == 1) {
-                            UIManager.Instance.OpenToast("授权异常", UIManager.GeneralToastLevel.Error);
+                        if (fetchResult != 0 ) {
+                            /// 异常问题
+                            if (fetchResult == 1)
+                            {
+                                UIManager.Instance.OpenToast("授权异常", UIManager.GeneralToastLevel.Error);
+                            }
                             mannualVerify = 2;
-                        }else if (fetchResult == -1) {
-                           mannualVerify = 2;
                         }
                     }
                     else {
@@ -360,7 +359,7 @@ namespace TapSDK.Compliance
             // 手动认证
             if (mannualVerify != 0) {
                 try {
-                    await VerifyManuallyAsync(mannualVerify == 1);
+                    await VerifyManuallyAsync();
                 }
                 catch (TaskCanceledException) {
                     TapLogger.Debug("[TapTap: ChinaCompliance] 手动实名制过程中主动退出! 触发 TaskCanceledException");
@@ -368,82 +367,12 @@ namespace TapSDK.Compliance
                     return tcs.Task.Result;
                 }
             }
-
-            try {
-                var tempResult = await ValidateVerification(showPopupInVerification);
-                tcs.TrySetResult(tempResult);
-                bool isVerified = tempResult == 0;
-                if (isVerified && mannualVerify == 0) {
-                     ShowVerifiedToast();
-                }
-                //认证失败:前置无弹窗的话，回调取消；前置有弹窗，保持弹窗
-                else if (tempResult == -3) {
-                    if (showPopupInVerification) {
-                        tcs.TrySetResult(await GetVerificationResult(userId));
-                    }
-                    else {
-                        TapLogger.Debug("[TapTap: ChinaCompliance] 认证失败,并且没有前置弹窗,直接触发取消回调! 触发 TaskCanceledException");
-                        tcs.TrySetResult(StartUpResult.REAL_NAME_STOP);
-                    }
-                }
-            }
-            catch (TaskCanceledException) {
-                TapLogger.Debug("[TapTap: ChinaCompliance] 手动实名制过程中主动退出! 触发 TaskCanceledException");
-                tcs.TrySetResult(StartUpResult.REAL_NAME_STOP);
-            }
-            catch (Exception e) {
-                tcs.TrySetException(e);
-            }
-
-            return tcs.Task.Result;
+            return Verification.IsVerified ? 0 :  await ShowVerifingTip();
         }
         
-        /// <summary>
-        /// 验证已经获取到的 Verification 是否有效,如果有效,则直接返回;如果无效,则弹出相应的提示
-        /// </summary>
-        /// <param name="havePopupBefore">前置是否有弹窗</param>
-        /// <returns>-1:认证中;-2:实名信息为空;-3:认证未通过;0-认证成功</returns>
-        private async Task<int> ValidateVerification(bool havePopupBefore) {
-            var tcs = new TaskCompletionSource<int>();
-            if (Verification.Current == null) {
-                TapLogger.Error("[TapTap: ChinaCompliance] 已经获取过实名信息,但是到了验证阶段实名信息仍未空!");
-                tcs.TrySetResult(-2);
-            }
-            else if (Verification.IsVerifing) {
-                var tip = Config.GetInputIdentifyBlockingTip();
-                Action onOk = () => {
-                    TapLogger.Debug("[TapTap: ChinaCompliance] 认证中,退出游戏!");
-                    tcs.TrySetResult(-1);
-                    #if !UNITY_EDITOR
-                    Application.Quit();
-                    #else
-                    EditorApplication.isPlaying = false;
-                    #endif
-                };
-                TapComplianceUI.OpenHealthPaymentPanel(tip.Title, tip.Content, tip.PositiveButtonText, onOk);
-                await tcs.Task;
-            }
-            else if (Verification.IsVerifyFailed) {
-                // TODO:多语言
-                UIManager.Instance.OpenToast("认证未通过, 请在 Tap 客户端重新提交实名信息", UIManager.GeneralToastLevel.Error);
-                if (havePopupBefore) {
-                    tcs.TrySetResult(-3);
-                }
-                else {
-                    throw new TaskCanceledException();
-                }
-            }
-            else {
-                TapLogger.Debug("[TapTap: ChinaCompliance] 认证成功!接入认证!");
-                tcs.TrySetResult(0);
-            }
-
-            await tcs.Task;
-            return tcs.Task.Result;
-        }
         
         /// <summary>
-        /// 获取 Token,分为几种情况:1)不是TapUser的话,需要去展示授权界面,授权界面可能选择拒绝,这时转为手动;2)是TapUser,但是没有Compliance权限,这时也需要去展示授权界面;3)是TapUser,并且有Compliance权限,这时直接返回Token
+        /// 获取 Token,分为几种情况:1)不是TapUser的话,需要去展示包含手动的授权界面;2)是TapUser,这时需要去展示仅包含 Tap 的授权界面;
         /// </summary>
         /// <param name="userId"></param>
         /// <returns></returns>
