@@ -3,6 +3,7 @@ using TapSDK.Core;
 using TapSDK.Compliance.Model;
 using TapSDK.Compliance.Internal;
 using System.Threading.Tasks;
+using TapSDK.Core.Internal.Log;
 
 namespace TapSDK.Compliance
 {
@@ -10,12 +11,12 @@ namespace TapSDK.Compliance
     public static class TapTapCompliance
     {
 
-        public static readonly string Version = "4.7.1";
+        public static readonly string Version = "4.8.1-beta.1";
 
         public static void RegisterComplianceCallback(Action<int, string> callback)
         {
             if (ComplianceJobManager.IsInit() == false) {
-                TapLogger.Warn("TapSDK::ComplianceUIKit is not init, please call Init first!");
+                TapLog.Warning("TapSDK::ComplianceUIKit is not init, please call Init first!");
             }
             ComplianceJobManager.Job?.RegisterComplianceCallback(callback);
         }
